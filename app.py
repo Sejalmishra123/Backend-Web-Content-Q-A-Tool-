@@ -12,7 +12,8 @@ app = Flask(__name__)
 # CORS(app)
 # CORS(app, resources={r"/*": {"origins": "*"}})
 
-CORS(app, resources={r"/*": {"origins": "https://webconttool.netlify.app/"}})
+CORS(app, resources={r"/*": {"origins": "*"}})
+
 web_contents = {}  # Stores scraped content per URL
 
 def scrape_content(url):
