@@ -154,19 +154,28 @@ def ask():
             return jsonify({"error": "No question provided"}), 400
 
         if not web_contents:
+            print("❌ No content stored in web_contents!")
             return jsonify({"answer": ["No content ingested yet!"]})
 
         all_sentences = []
         sentence_sources = {}
 
+        print(f"🔍 Processing question: {question}")
+        print(f"📄 Checking stored content from {len(web_contents)} URLs...")
+
         for url, content in web_contents.items():
-            sentences = nltk.sent_tokenize(content)
+            print(f"✅ Processing content from: {url} (Length: {len(content)} characters)")
+
+            sentences = nltk.sent_tokenize(content)  # Split content into sentences
             for sentence in sentences:
                 all_sentences.append(sentence)
                 sentence_sources[sentence] = url
 
         if not all_sentences:
+            print("❌ No sentences extracted from the stored content!")
             return jsonify({"answer": ["No relevant answer found."]})
+
+        print(f"✅ Total sentences extracted: {len(all_sentences)}")
 
         vectorizer = TfidfVectorizer(max_features=5000)
         tfidf_matrix = vectorizer.fit_transform([question] + all_sentences)
@@ -176,14 +185,17 @@ def ask():
         answers = [all_sentences[i] for i in best_match_indices if similarities[i] > 0.1]
 
         if not answers:
+            print("❌ No sentence matched with sufficient similarity!")
             return jsonify({"answer": ["No relevant answer found."]})
 
+        print(f"✅ Returning top {len(answers)} answers.")
         return jsonify({"answer": answers})
 
     except Exception as e:
         error_msg = traceback.format_exc()
-        print(f"ERROR in /ask: {error_msg}")
+        print(f"❌ ERROR in /ask: {error_msg}")
         return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
+
 
 
 if __name__ == '__main__':
