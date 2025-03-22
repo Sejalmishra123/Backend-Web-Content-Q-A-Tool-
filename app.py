@@ -9,8 +9,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 nltk.download('punkt')
 
 app = Flask(__name__)
-CORS(app)
+# CORS(app)
+# CORS(app, resources={r"/*": {"origins": "*"}})
 
+CORS(app, resources={r"/*": {"origins": "https://webconttool.netlify.app/"}})
 web_contents = {}  # Stores scraped content per URL
 
 def scrape_content(url):
@@ -64,6 +66,11 @@ def ask():
     return jsonify({"answer": answers if answers else ["No relevant answer found."]})
 
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+# if __name__ == '__main__':
+#     app.run(debug=True, port=5000)
 
+import os
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))  # Hosting provider ke port ka use karega
+    app.run(debug=False, port=port, host="0.0.0.0")  # External access allow karega
