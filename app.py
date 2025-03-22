@@ -84,7 +84,7 @@ import traceback
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Ensure required NLTK resources are available
+# Ensure NLTK resources are available
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
@@ -93,24 +93,30 @@ except LookupError:
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-web_contents = {}
+web_contents = {}  # Dictionary to store scraped content per URL
+
 
 def scrape_content(url):
     """ Scrape content from a given URL and store it. """
     try:
+        print(f"Fetching content from: {url}")
         response = requests.get(url, timeout=10)
-        response.raise_for_status()
+        response.raise_for_status()  # Raise an error for failed requests
 
         soup = BeautifulSoup(response.text, 'html.parser')
         paragraphs = [p.get_text() for p in soup.find_all('p')]
 
         if paragraphs:
-            web_contents[url] = " ".join(paragraphs)
+            content = " ".join(paragraphs)
+            web_contents[url] = content  # Store scraped content
+            print(f"Content stored for {url}: {len(content)} characters")
             return f"Content from {url} scraped successfully!"
         else:
+            print(f"No content found at {url}.")
             return f"No content found at {url}."
 
     except requests.exceptions.RequestException as e:
+        print(f"Error fetching {url}: {str(e)}")
         return f"Error fetching URL {url}: {str(e)}"
 
 
@@ -126,8 +132,9 @@ def ingest():
 
         for url in urls:
             message = scrape_content(url)
-            print(message)
+            print(message)  # Print success or error message
 
+        print(f"Stored URLs: {list(web_contents.keys())}")
         return jsonify({"message": "Content Ingested", "stored_urls": list(web_contents.keys())})
 
     except Exception as e:
@@ -182,4 +189,4 @@ def ask():
 if __name__ == '__main__':
     import os
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, port=port, host="0.0.0.0")
+    app.run(debug=True, port=port, host="0.0.0.0")
