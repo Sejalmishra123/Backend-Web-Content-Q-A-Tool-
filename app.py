@@ -75,7 +75,6 @@
 # if __name__ == '__main__':
 #     port = int(os.environ.get("PORT", 5000))  # Hosting provider ke port ka use karega
 #     app.run(debug=False, port=port, host="0.0.0.0")  # External access allow karega
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
@@ -85,26 +84,28 @@ import traceback
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Download necessary NLTK data
-nltk.download('punkt')
+# Ensure required NLTK resources are available
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Dictionary to store scraped content per URL
 web_contents = {}
 
 def scrape_content(url):
     """ Scrape content from a given URL and store it. """
     try:
-        response = requests.get(url, timeout=10)  # Timeout to prevent hanging
-        response.raise_for_status()  # Raise error for bad status codes (4xx, 5xx)
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
 
         soup = BeautifulSoup(response.text, 'html.parser')
         paragraphs = [p.get_text() for p in soup.find_all('p')]
 
         if paragraphs:
-            web_contents[url] = " ".join(paragraphs)  # Store text per URL
+            web_contents[url] = " ".join(paragraphs)
             return f"Content from {url} scraped successfully!"
         else:
             return f"No content found at {url}."
@@ -121,11 +122,11 @@ def ingest():
         urls = data.get('urls', [])
 
         if not urls:
-            return jsonify({"error": "No URLs provided"}), 400  # Bad Request
+            return jsonify({"error": "No URLs provided"}), 400
 
         for url in urls:
             message = scrape_content(url)
-            print(message)  # Log the scraping process
+            print(message)
 
         return jsonify({"message": "Content Ingested", "stored_urls": list(web_contents.keys())})
 
@@ -143,13 +144,13 @@ def ask():
         question = data.get('question', '').strip()
 
         if not question:
-            return jsonify({"error": "No question provided"}), 400  # Bad Request
+            return jsonify({"error": "No question provided"}), 400
 
         if not web_contents:
             return jsonify({"answer": ["No content ingested yet!"]})
 
         all_sentences = []
-        sentence_sources = {}  # Map sentences to their sources
+        sentence_sources = {}
 
         for url, content in web_contents.items():
             sentences = nltk.sent_tokenize(content)
@@ -160,14 +161,12 @@ def ask():
         if not all_sentences:
             return jsonify({"answer": ["No relevant answer found."]})
 
-        # Compute similarity
-        vectorizer = TfidfVectorizer(max_features=5000)  # Limit features to prevent memory issues
+        vectorizer = TfidfVectorizer(max_features=5000)
         tfidf_matrix = vectorizer.fit_transform([question] + all_sentences)
         similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:]).flatten()
 
-        # Get top 3 most relevant sentences
         best_match_indices = similarities.argsort()[-3:][::-1]
-        answers = [all_sentences[i] for i in best_match_indices if similarities[i] > 0.1]  # Filter out weak matches
+        answers = [all_sentences[i] for i in best_match_indices if similarities[i] > 0.1]
 
         if not answers:
             return jsonify({"answer": ["No relevant answer found."]})
@@ -182,6 +181,5 @@ def ask():
 
 if __name__ == '__main__':
     import os
-    port = int(os.environ.get("PORT", 5000))  # Use the provided port
-    app.run(debug=False, port=port, host="0.0.0.0")  # Allow external access
-
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, port=port, host="0.0.0.0")
