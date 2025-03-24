@@ -82,6 +82,7 @@ from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
 import nltk
+import os
 import traceback
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
