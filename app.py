@@ -87,13 +87,13 @@ import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Set NLTK data path explicitly for deployment compatibility
-nltk_data_path = os.path.join(os.getcwd(), "nltk_data")
-os.makedirs(nltk_data_path, exist_ok=True)
-nltk.data.path.append(nltk_data_path)
+# Set an explicit path for NLTK data
+NLTK_DATA_PATH = "/tmp/nltk_data"
+os.makedirs(NLTK_DATA_PATH, exist_ok=True)
+nltk.data.path.append(NLTK_DATA_PATH)
 
-# Ensure 'punkt' is downloaded
-nltk.download('punkt', download_dir=nltk_data_path)
+# Forcefully download 'punkt'
+nltk.download('punkt', download_dir=NLTK_DATA_PATH)
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
