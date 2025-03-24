@@ -93,9 +93,10 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 web_contents = {}  # Dictionary to store scraped content per URL
 
 def clean_text(text):
-    """Remove unnecessary text and boilerplate content."""
-    text = re.sub(r'\b(Comment|More info|Advertise with us|Next Article)\b', '', text, flags=re.IGNORECASE)
+    """Remove unnecessary text, repeated words, and boilerplate content."""
+    text = re.sub(r'\b(Comment|More info|Advertise with us|Next Article|Follow|Improve Article|Tags|Similar Reads)\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'(\b\w+\b)(?=.*\b\1\b)', '', text)  # Remove duplicate words
     return text
 
 def scrape_content(url):
@@ -190,7 +191,7 @@ def ask():
         best_answer = all_sentences[best_match_index]
         source_url = sentence_sources[best_answer]
         
-        return jsonify({"answer": [f"{best_answer} (Source: {source_url})"]})
+        return jsonify({"answer": [f"{best_answer.strip()} (Source: {source_url})"]})
     
     except Exception as e:
         error_msg = traceback.format_exc()
