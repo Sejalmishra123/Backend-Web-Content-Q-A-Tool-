@@ -165,9 +165,8 @@ def ask():
             print(f"✅ Processing content from: {url} (Length: {len(content)} characters)")
             sentences = split_sentences(content)  # Using regex instead of nltk
             for sentence in sentences:
-                if len(sentence.strip()) > 10:  # Ignore very short fragments
-                    all_sentences.append(sentence.strip())
-                    sentence_sources[sentence.strip()] = url
+                all_sentences.append(sentence)
+                sentence_sources[sentence] = url
 
         if not all_sentences:
             print("❌ No sentences extracted from the stored content!")
@@ -180,22 +179,14 @@ def ask():
         similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:]).flatten()
 
         best_match_indices = similarities.argsort()[-3:][::-1]
-        answers = []
-        sources = []
-
-        for i in best_match_indices:
-            if similarities[i] > 0.2:  # Increased similarity threshold to 0.2
-                answers.append(all_sentences[i])
-                sources.append(sentence_sources[all_sentences[i]])
+        answers = [all_sentences[i] for i in best_match_indices if similarities[i] > 0.1]
 
         if not answers:
             print("❌ No sentence matched with sufficient similarity!")
             return jsonify({"answer": ["No relevant answer found."]})
 
-        response = [{"text": ans, "source": src} for ans, src in zip(answers, sources)]
-
         print(f"✅ Returning top {len(answers)} answers.")
-        return jsonify({"answers": response})
+        return jsonify({"answer": answers})
 
     except Exception as e:
         error_msg = traceback.format_exc()
