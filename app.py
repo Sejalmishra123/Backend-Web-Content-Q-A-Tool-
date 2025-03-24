@@ -94,9 +94,9 @@ web_contents = {}  # Dictionary to store scraped content per URL
 
 def clean_text(text):
     """Remove unnecessary text, repeated words, and boilerplate content."""
-    text = re.sub(r'\b(Comment|More info|Advertise with us|Next Article|Follow|Improve Article|Tags|Similar Reads)\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(Comment|More info|Advertise with us|Next Article|Follow|Improve Article|Tags|Similar Reads|Machine Learning AI-ML-DS Tutorials)\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\s+', ' ', text).strip()
-    text = re.sub(r'(\b\w+\b)(?=.*\b\1\b)', '', text)  # Remove duplicate words
+    text = re.sub(r'\b(\w+) \1\b', '\1', text)  # Remove duplicate consecutive words
     return text
 
 def scrape_content(url):
@@ -172,8 +172,10 @@ def ask():
         for url, content in web_contents.items():
             sentences = split_sentences(content)
             for sentence in sentences:
-                all_sentences.append(sentence)
-                sentence_sources[sentence] = url
+                clean_sentence = clean_text(sentence)
+                if clean_sentence:
+                    all_sentences.append(clean_sentence)
+                    sentence_sources[clean_sentence] = url
         
         if not all_sentences:
             return jsonify({"answer": ["No relevant answer found."]})
