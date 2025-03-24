@@ -82,22 +82,17 @@ from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
 import nltk
-import os
 import traceback
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # Ensure NLTK resources are available
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
+nltk.download('punkt')
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 web_contents = {}  # Dictionary to store scraped content per URL
-
 
 def scrape_content(url):
     """ Scrape content from a given URL and store it. """
@@ -122,7 +117,6 @@ def scrape_content(url):
         print(f"Error fetching {url}: {str(e)}")
         return f"Error fetching URL {url}: {str(e)}"
 
-
 @app.route('/ingest', methods=['POST'])
 def ingest():
     """ Ingest content from provided URLs. """
@@ -144,7 +138,6 @@ def ingest():
         error_msg = traceback.format_exc()
         print(f"ERROR in /ingest: {error_msg}")
         return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
-
 
 @app.route('/ask', methods=['POST'])
 def ask():
@@ -168,7 +161,6 @@ def ask():
 
         for url, content in web_contents.items():
             print(f"✅ Processing content from: {url} (Length: {len(content)} characters)")
-
             sentences = nltk.sent_tokenize(content)  # Split content into sentences
             for sentence in sentences:
                 all_sentences.append(sentence)
@@ -198,8 +190,6 @@ def ask():
         error_msg = traceback.format_exc()
         print(f"❌ ERROR in /ask: {error_msg}")
         return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
-
-
 
 if __name__ == '__main__':
     import os
