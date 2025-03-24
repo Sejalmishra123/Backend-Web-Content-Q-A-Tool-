@@ -75,6 +75,8 @@
 # if __name__ == '__main__':
 #     port = int(os.environ.get("PORT", 5000))  # Hosting provider ke port ka use karega
 #     app.run(debug=False, port=port, host="0.0.0.0")  # External access allow karega
+
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
