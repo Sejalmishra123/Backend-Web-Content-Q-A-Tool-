@@ -83,11 +83,17 @@ import requests
 from bs4 import BeautifulSoup
 import nltk
 import traceback
+import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Ensure NLTK resources are available
-nltk.download('punkt')
+# Set NLTK data path explicitly for deployment compatibility
+nltk_data_path = os.path.join(os.getcwd(), "nltk_data")
+os.makedirs(nltk_data_path, exist_ok=True)
+nltk.data.path.append(nltk_data_path)
+
+# Ensure 'punkt' is downloaded
+nltk.download('punkt', download_dir=nltk_data_path)
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -192,6 +198,5 @@ def ask():
         return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
 
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, port=port, host="0.0.0.0")
