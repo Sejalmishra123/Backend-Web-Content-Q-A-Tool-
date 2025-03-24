@@ -97,11 +97,13 @@ def scrape_content(url):
     try:
         print(f"Fetching content from: {url}")
         response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raise error for failed requests
-
+        response.raise_for_status()
+        
         soup = BeautifulSoup(response.text, 'html.parser')
-        paragraphs = [p.get_text() for p in soup.find_all('p')]
-
+        
+        # Extract text from multiple tags
+        paragraphs = [p.get_text() for p in soup.find_all(['p', 'li', 'span', 'div'])]
+        
         if paragraphs:
             content = " ".join(paragraphs)
             web_contents[url] = content  # Store scraped content
@@ -110,14 +112,14 @@ def scrape_content(url):
         else:
             print(f"No content found at {url}.")
             return f"No content found at {url}."
-
+    
     except requests.exceptions.RequestException as e:
         print(f"Error fetching {url}: {str(e)}")
         return f"Error fetching URL {url}: {str(e)}"
 
 def split_sentences(text):
-    """Replace nltk.sent_tokenize() with regex-based sentence splitting."""
-    return re.split(r'(?<=[.!?])\s+', text)  # Split at `.`, `!`, `?` followed by space
+    """Use regex to tokenize sentences for better accuracy."""
+    return re.split(r'(?<=[.!?])\s+', text)
 
 @app.route('/ingest', methods=['POST'])
 def ingest():
@@ -125,17 +127,17 @@ def ingest():
     try:
         data = request.json
         urls = data.get('urls', [])
-
+        
         if not urls:
             return jsonify({"error": "No URLs provided"}), 400
 
         for url in urls:
             message = scrape_content(url)
-            print(message)  # Print success or error message
-
+            print(message)
+        
         print(f"Stored URLs: {list(web_contents.keys())}")
         return jsonify({"message": "Content Ingested", "stored_urls": list(web_contents.keys())})
-
+    
     except Exception as e:
         error_msg = traceback.format_exc()
         print(f"ERROR in /ingest: {error_msg}")
@@ -152,42 +154,34 @@ def ask():
             return jsonify({"error": "No question provided"}), 400
 
         if not web_contents:
-            print("❌ No content stored in web_contents!")
             return jsonify({"answer": ["No content ingested yet!"]})
-
+        
         all_sentences = []
         sentence_sources = {}
-
+        
         print(f"🔍 Processing question: {question}")
-        print(f"📄 Checking stored content from {len(web_contents)} URLs...")
-
+        
         for url, content in web_contents.items():
-            print(f"✅ Processing content from: {url} (Length: {len(content)} characters)")
-            sentences = split_sentences(content)  # Using regex instead of nltk
+            sentences = split_sentences(content)
             for sentence in sentences:
                 all_sentences.append(sentence)
                 sentence_sources[sentence] = url
-
+        
         if not all_sentences:
-            print("❌ No sentences extracted from the stored content!")
             return jsonify({"answer": ["No relevant answer found."]})
 
-        print(f"✅ Total sentences extracted: {len(all_sentences)}")
-
-        vectorizer = TfidfVectorizer(max_features=5000)
+        vectorizer = TfidfVectorizer(max_features=5000, stop_words='english')
         tfidf_matrix = vectorizer.fit_transform([question] + all_sentences)
         similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:]).flatten()
-
-        best_match_indices = similarities.argsort()[-3:][::-1]
-        answers = [all_sentences[i] for i in best_match_indices if similarities[i] > 0.1]
-
+        
+        best_match_indices = similarities.argsort()[-5:][::-1]  # Get top 5 matches
+        answers = [(all_sentences[i], sentence_sources[all_sentences[i]]) for i in best_match_indices if similarities[i] > 0.2]
+        
         if not answers:
-            print("❌ No sentence matched with sufficient similarity!")
             return jsonify({"answer": ["No relevant answer found."]})
-
-        print(f"✅ Returning top {len(answers)} answers.")
-        return jsonify({"answer": answers})
-
+        
+        return jsonify({"answer": [f"{ans} (Source: {src})" for ans, src in answers]})
+    
     except Exception as e:
         error_msg = traceback.format_exc()
         print(f"❌ ERROR in /ask: {error_msg}")
