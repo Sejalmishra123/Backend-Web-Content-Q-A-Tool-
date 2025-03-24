@@ -92,8 +92,14 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 web_contents = {}  # Dictionary to store scraped content per URL
 
+def clean_text(text):
+    """Remove unnecessary text and boilerplate content."""
+    text = re.sub(r'\b(Comment|More info|Advertise with us|Next Article)\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
 def scrape_content(url):
-    """Scrape content from a given URL and store it."""
+    """Scrape and clean content from a given URL."""
     try:
         print(f"Fetching content from: {url}")
         response = requests.get(url, timeout=10)
@@ -101,17 +107,18 @@ def scrape_content(url):
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Extract text from multiple tags
-        paragraphs = [p.get_text() for p in soup.find_all(['p', 'li', 'span', 'div'])]
+        # Extract text from important tags only
+        elements = soup.find_all(['p', 'h1', 'h2', 'li'])
+        paragraphs = [clean_text(elem.get_text()) for elem in elements if elem.get_text().strip()]
         
         if paragraphs:
             content = " ".join(paragraphs)
-            web_contents[url] = content  # Store scraped content
+            web_contents[url] = content
             print(f"Content stored for {url}: {len(content)} characters")
             return f"Content from {url} scraped successfully!"
         else:
-            print(f"No content found at {url}.")
-            return f"No content found at {url}."
+            print(f"No useful content found at {url}.")
+            return f"No useful content found at {url}."
     
     except requests.exceptions.RequestException as e:
         print(f"Error fetching {url}: {str(e)}")
@@ -145,7 +152,7 @@ def ingest():
 
 @app.route('/ask', methods=['POST'])
 def ask():
-    """Process user question and find relevant answers from ingested content."""
+    """Process user question and return relevant answers."""
     try:
         data = request.json
         question = data.get('question', '').strip()
@@ -174,13 +181,16 @@ def ask():
         tfidf_matrix = vectorizer.fit_transform([question] + all_sentences)
         similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:]).flatten()
         
-        best_match_indices = similarities.argsort()[-5:][::-1]  # Get top 5 matches
-        answers = [(all_sentences[i], sentence_sources[all_sentences[i]]) for i in best_match_indices if similarities[i] > 0.2]
+        best_match_index = similarities.argmax()  # Get the best match
+        best_match_score = similarities[best_match_index]
         
-        if not answers:
+        if best_match_score < 0.3:
             return jsonify({"answer": ["No relevant answer found."]})
         
-        return jsonify({"answer": [f"{ans} (Source: {src})" for ans, src in answers]})
+        best_answer = all_sentences[best_match_index]
+        source_url = sentence_sources[best_answer]
+        
+        return jsonify({"answer": [f"{best_answer} (Source: {source_url})"]})
     
     except Exception as e:
         error_msg = traceback.format_exc()
