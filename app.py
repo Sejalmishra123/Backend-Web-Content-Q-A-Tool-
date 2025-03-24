@@ -81,19 +81,11 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 from bs4 import BeautifulSoup
-import nltk
 import traceback
 import os
+import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
-# Set an explicit path for NLTK data
-NLTK_DATA_PATH = "/tmp/nltk_data"
-os.makedirs(NLTK_DATA_PATH, exist_ok=True)
-nltk.data.path.append(NLTK_DATA_PATH)
-
-# Forcefully download 'punkt'
-nltk.download('punkt', download_dir=NLTK_DATA_PATH)
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -101,11 +93,11 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 web_contents = {}  # Dictionary to store scraped content per URL
 
 def scrape_content(url):
-    """ Scrape content from a given URL and store it. """
+    """Scrape content from a given URL and store it."""
     try:
         print(f"Fetching content from: {url}")
         response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raise an error for failed requests
+        response.raise_for_status()  # Raise error for failed requests
 
         soup = BeautifulSoup(response.text, 'html.parser')
         paragraphs = [p.get_text() for p in soup.find_all('p')]
@@ -123,9 +115,13 @@ def scrape_content(url):
         print(f"Error fetching {url}: {str(e)}")
         return f"Error fetching URL {url}: {str(e)}"
 
+def split_sentences(text):
+    """Replace nltk.sent_tokenize() with regex-based sentence splitting."""
+    return re.split(r'(?<=[.!?])\s+', text)  # Split at `.`, `!`, `?` followed by space
+
 @app.route('/ingest', methods=['POST'])
 def ingest():
-    """ Ingest content from provided URLs. """
+    """Ingest content from provided URLs."""
     try:
         data = request.json
         urls = data.get('urls', [])
@@ -147,7 +143,7 @@ def ingest():
 
 @app.route('/ask', methods=['POST'])
 def ask():
-    """ Process user question and find relevant answers from ingested content. """
+    """Process user question and find relevant answers from ingested content."""
     try:
         data = request.json
         question = data.get('question', '').strip()
@@ -167,7 +163,7 @@ def ask():
 
         for url, content in web_contents.items():
             print(f"✅ Processing content from: {url} (Length: {len(content)} characters)")
-            sentences = nltk.sent_tokenize(content)  # Split content into sentences
+            sentences = split_sentences(content)  # Using regex instead of nltk
             for sentence in sentences:
                 all_sentences.append(sentence)
                 sentence_sources[sentence] = url
