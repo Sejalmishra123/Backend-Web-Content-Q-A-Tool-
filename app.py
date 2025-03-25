@@ -99,6 +99,16 @@ def clean_text(text):
     text = re.sub(r'\b(\w+) \1\b', '\1', text)  # Remove duplicate consecutive words
     return text
 
+def deduplicate_sentences(sentences):
+    """Remove duplicate sentences from the list."""
+    seen = set()
+    unique_sentences = []
+    for sentence in sentences:
+        if sentence not in seen:
+            seen.add(sentence)
+            unique_sentences.append(sentence)
+    return unique_sentences
+
 def scrape_content(url):
     """Scrape and clean content from a given URL."""
     try:
@@ -113,7 +123,8 @@ def scrape_content(url):
         paragraphs = [clean_text(elem.get_text()) for elem in elements if elem.get_text().strip()]
         
         if paragraphs:
-            content = " ".join(paragraphs)
+            deduplicated_paragraphs = deduplicate_sentences(paragraphs)
+            content = " ".join(deduplicated_paragraphs)
             web_contents[url] = content
             print(f"Content stored for {url}: {len(content)} characters")
             return f"Content from {url} scraped successfully!"
@@ -177,6 +188,8 @@ def ask():
                     all_sentences.append(clean_sentence)
                     sentence_sources[clean_sentence] = url
         
+        all_sentences = deduplicate_sentences(all_sentences)  # Deduplicate sentences
+        
         if not all_sentences:
             return jsonify({"answer": ["No relevant answer found."]})
 
@@ -187,11 +200,14 @@ def ask():
         best_match_index = similarities.argmax()  # Get the best match
         best_match_score = similarities[best_match_index]
         
-        if best_match_score < 0.3:
+        if best_match_score < 0.5:  # Increased threshold for relevance
             return jsonify({"answer": ["No relevant answer found."]})
         
         best_answer = all_sentences[best_match_index]
         source_url = sentence_sources[best_answer]
+        
+        # Final cleanup to ensure no repetition in the answer
+        best_answer = re.sub(r'\b(\w+) \1\b', '\1', best_answer)  # Remove duplicate consecutive words again
         
         return jsonify({"answer": [f"{best_answer.strip()} (Source: {source_url})"]})
     
@@ -202,4 +218,4 @@ def ask():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, port=port, host="0.0.0.0")                       
+    app.run(debug=True, port=port, host="0.0.0.0")
