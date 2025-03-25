@@ -84,30 +84,21 @@ from bs4 import BeautifulSoup
 import traceback
 import os
 import re
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
+import torch
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 web_contents = {}  # Dictionary to store scraped content per URL
+model = SentenceTransformer('all-MiniLM-L6-v2')  # Pretrained BERT model for similarity matching
 
 def clean_text(text):
     """Remove unnecessary text, repeated words, and boilerplate content."""
     text = re.sub(r'\b(Comment|More info|Advertise with us|Next Article|Follow|Improve Article|Tags|Similar Reads|Machine Learning AI-ML-DS Tutorials)\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\s+', ' ', text).strip()
-    text = re.sub(r'\b(\w+) \1\b', '\1', text)  # Remove duplicate consecutive words
+    text = re.sub(r'\b(\w+)\s+\1\b', r'\1', text)  # Fixed duplicate word removal
     return text
-
-def deduplicate_sentences(sentences):
-    """Remove duplicate sentences from the list."""
-    seen = set()
-    unique_sentences = []
-    for sentence in sentences:
-        if sentence not in seen:
-            seen.add(sentence)
-            unique_sentences.append(sentence)
-    return unique_sentences
 
 def scrape_content(url):
     """Scrape and clean content from a given URL."""
@@ -117,14 +108,13 @@ def scrape_content(url):
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Extract text from important tags only
+
+        # Extract text only from main content areas (avoiding menus, footers, etc.)
         elements = soup.find_all(['p', 'h1', 'h2', 'li'])
         paragraphs = [clean_text(elem.get_text()) for elem in elements if elem.get_text().strip()]
         
         if paragraphs:
-            deduplicated_paragraphs = deduplicate_sentences(paragraphs)
-            content = " ".join(deduplicated_paragraphs)
+            content = " ".join(paragraphs)
             web_contents[url] = content
             print(f"Content stored for {url}: {len(content)} characters")
             return f"Content from {url} scraped successfully!"
@@ -137,8 +127,12 @@ def scrape_content(url):
         return f"Error fetching URL {url}: {str(e)}"
 
 def split_sentences(text):
-    """Use regex to tokenize sentences for better accuracy."""
-    return re.split(r'(?<=[.!?])\s+', text)
+    """Split text into sentences using regex (without NLTK)."""
+    return re.split(r'(?<=\w[.!?])\s+', text)
+
+def get_embedding(text):
+    """Get sentence embeddings using BERT."""
+    return model.encode(text, convert_to_tensor=True)
 
 @app.route('/ingest', methods=['POST'])
 def ingest():
@@ -146,17 +140,17 @@ def ingest():
     try:
         data = request.json
         urls = data.get('urls', [])
-        
+
         if not urls:
             return jsonify({"error": "No URLs provided"}), 400
 
         for url in urls:
             message = scrape_content(url)
             print(message)
-        
+
         print(f"Stored URLs: {list(web_contents.keys())}")
         return jsonify({"message": "Content Ingested", "stored_urls": list(web_contents.keys())})
-    
+
     except Exception as e:
         error_msg = traceback.format_exc()
         print(f"ERROR in /ingest: {error_msg}")
@@ -177,9 +171,9 @@ def ask():
         
         all_sentences = []
         sentence_sources = {}
-        
+
         print(f"🔍 Processing question: {question}")
-        
+
         for url, content in web_contents.items():
             sentences = split_sentences(content)
             for sentence in sentences:
@@ -187,30 +181,33 @@ def ask():
                 if clean_sentence:
                     all_sentences.append(clean_sentence)
                     sentence_sources[clean_sentence] = url
-        
-        all_sentences = deduplicate_sentences(all_sentences)  # Deduplicate sentences
-        
+
         if not all_sentences:
             return jsonify({"answer": ["No relevant answer found."]})
 
-        vectorizer = TfidfVectorizer(max_features=5000, stop_words='english')
-        tfidf_matrix = vectorizer.fit_transform([question] + all_sentences)
-        similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:]).flatten()
-        
-        best_match_index = similarities.argmax()  # Get the best match
+        # Generate embeddings for question and sentences
+        question_embedding = get_embedding(question)
+        sentence_embeddings = [get_embedding(sent) for sent in all_sentences]
+
+        # Compute cosine similarity
+        similarities = torch.nn.functional.cosine_similarity(
+            question_embedding.unsqueeze(0),
+            torch.stack(sentence_embeddings)
+        ).tolist()
+
+        # Find the best match
+        best_match_index = similarities.index(max(similarities))
         best_match_score = similarities[best_match_index]
-        
-        if best_match_score < 0.5:  # Increased threshold for relevance
+
+        # Lowered similarity threshold for better results
+        if best_match_score < 0.15:
             return jsonify({"answer": ["No relevant answer found."]})
-        
+
         best_answer = all_sentences[best_match_index]
         source_url = sentence_sources[best_answer]
-        
-        # Final cleanup to ensure no repetition in the answer
-        best_answer = re.sub(r'\b(\w+) \1\b', '\1', best_answer)  # Remove duplicate consecutive words again
-        
+
         return jsonify({"answer": [f"{best_answer.strip()} (Source: {source_url})"]})
-    
+
     except Exception as e:
         error_msg = traceback.format_exc()
         print(f"❌ ERROR in /ask: {error_msg}")
