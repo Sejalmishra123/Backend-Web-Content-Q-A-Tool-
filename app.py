@@ -1,96 +1,24 @@
-# from flask import Flask, request, jsonify
-# from flask_cors import CORS
-# import requests
-# from bs4 import BeautifulSoup
-# import nltk
-# from sklearn.feature_extraction.text import TfidfVectorizer
-# from sklearn.metrics.pairwise import cosine_similarity
+'''
+Flask-based web API for web scraping and answering questions based on scraped content.
+Uses TF-IDF and cosine similarity to find relevant answers.
+'''
 
-# nltk.download('punkt')
-
-# app = Flask(__name__)
-# # CORS(app)
-# # CORS(app, resources={r"/*": {"origins": "*"}})
-
-# CORS(app, resources={r"/*": {"origins": "*"}})
-
-# web_contents = {}  # Stores scraped content per URL
-
-# def scrape_content(url):
-#     try:
-#         response = requests.get(url)
-#         soup = BeautifulSoup(response.text, 'html.parser')
-#         paragraphs = [p.get_text() for p in soup.find_all('p')]
-#         web_contents[url] = " ".join(paragraphs)  # Store text per URL
-#         return "Content scraped successfully!"
-#     except Exception as e:
-#         return f"Error scraping content: {str(e)}"
-
-# @app.route('/ingest', methods=['POST'])
-# def ingest():
-#     data = request.json
-#     urls = data.get('urls', [])
-#     for url in urls:
-#         scrape_content(url)
-#     return jsonify({"message": "Content Ingested"})
-
-
-
-# @app.route('/ask', methods=['POST'])
-# def ask():
-#     data = request.json
-#     question = data.get('question', '').strip()
-
-#     if not web_contents:
-#         return jsonify({"answer": ["No content ingested yet!"]})
-
-#     all_sentences = []
-#     sentence_sources = {}  # Dictionary to map sentences to their sources
-
-#     for url, content in web_contents.items():
-#         sentences = nltk.sent_tokenize(content)
-#         for sentence in sentences:
-#             all_sentences.append(sentence)
-#             sentence_sources[sentence] = url  # Store which URL the sentence came from
-
-#     if not all_sentences:
-#         return jsonify({"answer": ["No relevant answer found."]})
-
-#     # Compute similarity
-#     vectorizer = TfidfVectorizer().fit_transform([question] + all_sentences)
-#     similarities = cosine_similarity(vectorizer[0:1], vectorizer[1:]).flatten()
-
-#     # Get top 3 most relevant sentences
-#     best_match_indices = similarities.argsort()[-3:][::-1]
-#     answers = [all_sentences[i] for i in best_match_indices if similarities[i] > 0.1]  # Filter out weak matches
-
-#     return jsonify({"answer": answers if answers else ["No relevant answer found."]})
-
-
-# # if __name__ == '__main__':
-# #     app.run(debug=True, port=5000)
-
-# import os
-
-# if __name__ == '__main__':
-#     port = int(os.environ.get("PORT", 5000))  # Hosting provider ke port ka use karega
-#     app.run(debug=False, port=port, host="0.0.0.0")  # External access allow karega
-
-
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import requests
-from bs4 import BeautifulSoup
-import traceback
-import os
-import re
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+# Importing necessary libraries
+from flask import Flask, request, jsonify  # Flask for API creation
+from flask_cors import CORS  # To allow cross-origin requests
+import requests  # For making HTTP requests
+from bs4 import BeautifulSoup  # For web scraping
+import traceback  # For error handling
+import os  # For handling environment variables
+import re  # For text cleaning and regex operations
+from sklearn.feature_extraction.text import TfidfVectorizer  # For text vectorization
+from sklearn.metrics.pairwise import cosine_similarity  # For measuring text similarity
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-web_contents = {}  # Dictionary to store scraped content per URL
+# Dictionary to store scraped web content
+web_contents = {}
 
 def clean_text(text):
     """Remove unnecessary text, repeated words, and boilerplate content."""
@@ -106,15 +34,16 @@ def scrape_content(url):
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         
+        # Parse the HTML content
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Extract text from important tags only
+        # Extract relevant text from paragraphs, headers, and list items
         elements = soup.find_all(['p', 'h1', 'h2', 'li'])
         paragraphs = [clean_text(elem.get_text()) for elem in elements if elem.get_text().strip()]
         
         if paragraphs:
             content = " ".join(paragraphs)
-            web_contents[url] = content
+            web_contents[url] = content  # Store scraped content
             print(f"Content stored for {url}: {len(content)} characters")
             return f"Content from {url} scraped successfully!"
         else:
@@ -126,12 +55,12 @@ def scrape_content(url):
         return f"Error fetching URL {url}: {str(e)}"
 
 def split_sentences(text):
-    """Use regex to tokenize sentences for better accuracy."""
+    """Use regex to tokenize text into sentences for better processing."""
     return re.split(r'(?<=[.!?])\s+', text)
 
 @app.route('/ingest', methods=['POST'])
 def ingest():
-    """Ingest content from provided URLs."""
+    """Endpoint to ingest content from provided URLs."""
     try:
         data = request.json
         urls = data.get('urls', [])
@@ -139,6 +68,7 @@ def ingest():
         if not urls:
             return jsonify({"error": "No URLs provided"}), 400
 
+        # Scrape content from each provided URL
         for url in urls:
             message = scrape_content(url)
             print(message)
@@ -153,7 +83,7 @@ def ingest():
 
 @app.route('/ask', methods=['POST'])
 def ask():
-    """Process user question and return relevant answers."""
+    """Endpoint to process user queries and return relevant answers."""
     try:
         data = request.json
         question = data.get('question', '').strip()
@@ -169,25 +99,27 @@ def ask():
         
         print(f"🔍 Processing question: {question}")
         
+        # Tokenize content from stored URLs
         for url, content in web_contents.items():
             sentences = split_sentences(content)
             for sentence in sentences:
                 clean_sentence = clean_text(sentence)
                 if clean_sentence:
                     all_sentences.append(clean_sentence)
-                    sentence_sources[clean_sentence] = url
+                    sentence_sources[clean_sentence] = url  # Store source URL for the sentence
         
         if not all_sentences:
             return jsonify({"answer": ["No relevant answer found."]})
 
+        # Compute similarity between question and stored sentences
         vectorizer = TfidfVectorizer(max_features=5000, stop_words='english')
         tfidf_matrix = vectorizer.fit_transform([question] + all_sentences)
         similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:]).flatten()
         
-        best_match_index = similarities.argmax()  # Get the best match
+        best_match_index = similarities.argmax()  # Get the best-matching sentence
         best_match_score = similarities[best_match_index]
         
-        if best_match_score < 0.3:
+        if best_match_score < 0.3:  # Threshold to ensure relevance
             return jsonify({"answer": ["No relevant answer found."]})
         
         best_answer = all_sentences[best_match_index]
@@ -201,6 +133,6 @@ def ask():
         return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
 
 if __name__ == '__main__':
+    # Set up Flask app to run on specified port
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, port=port, host="0.0.0.0")                        
-
+    app.run(debug=True, port=port, host="0.0.0.0")
